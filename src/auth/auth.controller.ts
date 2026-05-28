@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @ApiTags('Auth')
@@ -17,9 +18,15 @@ export class AuthController {
   }
 
   @Post('login')
-  @ApiOperation({ summary: 'Login dan dapatkan JWT token' })
+  @ApiOperation({ summary: 'Login step 1: cek email+password, kirim OTP' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post('verify-otp')
+  @ApiOperation({ summary: 'Login step 2: verifikasi OTP, dapatkan token JWT' })
+  verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyOtp(dto);
   }
 
   @Get('me')

@@ -16,7 +16,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { PayOrderDto } from './dto/pay-order.dto';
 import { OrdersService } from './orders.service';
 
 @ApiTags('Orders')
@@ -27,7 +27,7 @@ export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Buat pesanan baru' })
+  @ApiOperation({ summary: 'Buat pesanan baru (status awal PENDING)' })
   create(@Req() req: any, @Body() dto: CreateOrderDto) {
     return this.ordersService.create(req.user.id, dto);
   }
@@ -44,18 +44,52 @@ export class OrdersController {
     return this.ordersService.findOne(id, req.user.id, req.user.role);
   }
 
-  @Patch(':id/status')
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Ubah status pesanan (ADMIN only)' })
-  updateStatus(
+  // USER bayar
+  @Post(':id/pay')
+  @ApiOperation({ summary: 'User bayar pesanan (WAITING_PAYMENT -> PAYMENT_REVIEW)' })
+  pay(
+    @Req() req: any,
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateOrderStatusDto,
+    @Body() dto: PayOrderDto,
   ) {
-    return this.ordersService.updateStatus(id, dto);
+    return this.ordersService.pay(id, req.user.id, req.user.role, dto);
   }
 
+  // ADMIN konfirmasi
+  @Patch(':id/confirm')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Admin konfirmasi pesanan (PENDING -> WAITING_PAYMENT)' })
+  confirm(@Param('id', ParseIntPipe) id: number) {
+    return this.ordersService.confirm(id);
+  }
+
+  // ADMIN verifikasi pembayaran
+  @Patch(':id/verify-payment')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Admin verifikasi pembayaran (PAYMENT_REVIEW -> PAID)' })
+  verifyPayment(@Param('id', ParseIntPipe) id: number) {
+    return this.ordersService.verifyPayment(id);
+  }
+
+  // ADMIN kirim
+  @Patch(':id/deliver')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Admin kirim pesanan (PAID -> DELIVERING)' })
+  deliver(@Param('id', ParseIntPipe) id: number) {
+    return this.ordersService.deliver(id);
+  }
+
+  // ADMIN tandai sampai
+  @Patch(':id/complete')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Admin tandai pesanan sampai (DELIVERING -> DELIVERED)' })
+  complete(@Param('id', ParseIntPipe) id: number) {
+    return this.ordersService.complete(id);
+  }
+
+  // USER/ADMIN cancel
   @Delete(':id')
-  @ApiOperation({ summary: 'Batalkan pesanan' })
+  @ApiOperation({ summary: 'Batalkan pesanan (USER hanya saat PENDING)' })
   cancel(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
     return this.ordersService.cancel(id, req.user.id, req.user.role);
   }
