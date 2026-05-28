@@ -1,89 +1,89 @@
-import { Injectable } from '@nestjs/common';
-import { SignupDto } from './dto/signup.dto';
-import { LoginDto } from './dto/login.dto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../prisma/prisma.service';
+import { LoginDto } from './dto/login.dto';
+import { SignupDto } from './dto/signup.dto';
 
 @Injectable()
 export class AuthService {
-
   constructor(
+    private prisma: PrismaService,
     private jwtService: JwtService,
   ) {}
 
-  private users = [];
-
-  private nextId = 1;
-
-  signup(dto: SignupDto) {
-
-    const existingUser = this.users.find(
-      (user) => user.email === dto.email,
-    );
-
-    if (existingUser) {
-      return {
-        message: 'Akun sudah ada, coba login',
-      };
-    }
-
+  async signup(dto: SignupDto) {
     if (dto.password !== dto.confirmPassword) {
-      return {
-        message: 'Password dan konfirmasi password tidak sama',
-      };
+      throw new BadRequestException('Password dan konfirmasi password tidak sama');
     }
 
-    const newUser = {
-      id: this.nextId++,
-      fullName: dto.fullName,
-      email: dto.email,
-      password: dto.password,
-     role: dto.role,
-    };
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (existing) {
+      throw new ConflictException('Email sudah terdaftar, silakan login');
+    }
 
-    this.users.push(newUser);
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        fullName: dto.fullName,
+        email: dto.email,
+        password: hashedPassword,
+      },
+      select: { id: true, fullName: true, email: true, role: true, createdAt: true },
+    });
 
     return {
       message: 'Signup berhasil',
-      user: newUser,
+      user,
     };
   }
 
-  login(dto: LoginDto) {
-
-    const user = this.users.find(
-      (user) => user.email === dto.email,
-    );
-
+  async login(dto: LoginDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     if (!user) {
-      return {
-        message: 'Email tidak ditemukan',
-      };
+      throw new UnauthorizedException('Email tidak ditemukan');
     }
 
-    if (user.password !== dto.password) {
-      return {
-        message: 'Password salah',
-      };
+    const valid = await bcrypt.compare(dto.password, user.password);
+    if (!valid) {
+      throw new UnauthorizedException('Password salah');
     }
 
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
+      fullName: user.fullName,
     };
 
     return {
       message: 'Login berhasil',
-
-      access_token:
-        this.jwtService.sign(payload),
-
-      user,
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+      },
     };
   }
 
-  getAllUsers() {
-    return this.users;
+  async getProfile(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, fullName: true, email: true, role: true, createdAt: true },
+    });
+    if (!user) throw new UnauthorizedException('User tidak ditemukan');
+    return user;
   }
 }
