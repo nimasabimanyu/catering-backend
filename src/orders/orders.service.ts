@@ -9,7 +9,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { PayOrderDto } from './dto/pay-order.dto';
 
-// dipakai berulang supaya konsisten
 const ORDER_INCLUDE = {
   items: { include: { package: true } },
   user: { select: { id: true, fullName: true, email: true } },
@@ -19,10 +18,6 @@ const ORDER_INCLUDE = {
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
-  // ============================================
-  // CREATE (TRANSAKSI): order + items + decrement stock
-  // status awal: PENDING
-  // ============================================
   async create(userId: number, dto: CreateOrderDto) {
     const packageIds = dto.items.map((i) => i.packageId);
     const packages = await this.prisma.package.findMany({
@@ -95,7 +90,6 @@ export class OrdersService {
     return order;
   }
 
-  // ADMIN: konfirmasi  PENDING -> WAITING_PAYMENT
   async confirm(id: number) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Pesanan tidak ditemukan');
@@ -109,7 +103,6 @@ export class OrdersService {
     });
   }
 
-  // USER: bayar  WAITING_PAYMENT -> PAYMENT_REVIEW
   async pay(id: number, userId: number, role: UserRole, dto: PayOrderDto) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Pesanan tidak ditemukan');
@@ -136,7 +129,6 @@ export class OrdersService {
     });
   }
 
-  // ADMIN: verifikasi pembayaran  PAYMENT_REVIEW -> PAID
   async verifyPayment(id: number) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Pesanan tidak ditemukan');
@@ -150,7 +142,6 @@ export class OrdersService {
     });
   }
 
-  // ADMIN: kirim  PAID -> DELIVERING
   async deliver(id: number) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Pesanan tidak ditemukan');
@@ -164,7 +155,6 @@ export class OrdersService {
     });
   }
 
-  // ADMIN: tandai sampai  DELIVERING -> DELIVERED
   async complete(id: number) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Pesanan tidak ditemukan');
@@ -178,7 +168,9 @@ export class OrdersService {
     });
   }
 
-  // USER cancel: hanya saat PENDING + rollback stock
+  // USER cancel: hanya saat PENDING.
+  // ADMIN cancel: kapan saja (untuk menolak pesanan).
+  // Stok dikembalikan otomatis.
   async cancel(id: number, currentUserId: number, currentRole: UserRole) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -197,6 +189,9 @@ export class OrdersService {
     if (order.status === OrderStatus.CANCELLED) {
       throw new BadRequestException('Pesanan sudah dibatalkan');
     }
+    if (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED) {
+      throw new BadRequestException('Pesanan yang sudah sampai tidak bisa dibatalkan');
+    }
 
     await this.prisma.$transaction(async (tx) => {
       for (const item of order.items) {
@@ -212,5 +207,20 @@ export class OrdersService {
     });
 
     return { message: 'Pesanan berhasil dibatalkan' };
+  }
+
+  // ADMIN: hapus permanen pesanan dari database
+  // Hanya boleh untuk pesanan yang sudah CANCELLED supaya tidak ada data aktif yg hilang
+  async permanentDelete(id: number) {
+    const order = await this.prisma.order.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException('Pesanan tidak ditemukan');
+    if (order.status !== OrderStatus.CANCELLED) {
+      throw new BadRequestException(
+        'Hanya pesanan yang sudah dibatalkan yang bisa dihapus permanen',
+      );
+    }
+    // OrderItem dihapus otomatis karena onDelete: Cascade di schema
+    await this.prisma.order.delete({ where: { id } });
+    return { message: 'Pesanan dihapus permanen' };
   }
 }

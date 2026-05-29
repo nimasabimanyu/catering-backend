@@ -44,7 +44,6 @@ export class OrdersController {
     return this.ordersService.findOne(id, req.user.id, req.user.role);
   }
 
-  // USER bayar
   @Post(':id/pay')
   @ApiOperation({ summary: 'User bayar pesanan (WAITING_PAYMENT -> PAYMENT_REVIEW)' })
   pay(
@@ -55,7 +54,6 @@ export class OrdersController {
     return this.ordersService.pay(id, req.user.id, req.user.role, dto);
   }
 
-  // ADMIN konfirmasi
   @Patch(':id/confirm')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Admin konfirmasi pesanan (PENDING -> WAITING_PAYMENT)' })
@@ -63,7 +61,6 @@ export class OrdersController {
     return this.ordersService.confirm(id);
   }
 
-  // ADMIN verifikasi pembayaran
   @Patch(':id/verify-payment')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Admin verifikasi pembayaran (PAYMENT_REVIEW -> PAID)' })
@@ -71,7 +68,6 @@ export class OrdersController {
     return this.ordersService.verifyPayment(id);
   }
 
-  // ADMIN kirim
   @Patch(':id/deliver')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Admin kirim pesanan (PAID -> DELIVERING)' })
@@ -79,7 +75,6 @@ export class OrdersController {
     return this.ordersService.deliver(id);
   }
 
-  // ADMIN tandai sampai
   @Patch(':id/complete')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Admin tandai pesanan sampai (DELIVERING -> DELIVERED)' })
@@ -87,10 +82,16 @@ export class OrdersController {
     return this.ordersService.complete(id);
   }
 
-  // USER/ADMIN cancel
   @Delete(':id')
-  @ApiOperation({ summary: 'Batalkan pesanan (USER hanya saat PENDING)' })
+  @ApiOperation({ summary: 'Batalkan/tolak pesanan (USER hanya saat PENDING, ADMIN kapan saja)' })
   cancel(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
     return this.ordersService.cancel(id, req.user.id, req.user.role);
+  }
+
+  @Delete(':id/permanent')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Admin hapus pesanan permanen (hanya untuk CANCELLED)' })
+  permanentDelete(@Param('id', ParseIntPipe) id: number) {
+    return this.ordersService.permanentDelete(id);
   }
 }
